@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Calendar, FileText, DollarSign, Settings, 
   Search, Bell, Moon, Sun, LogOut, ChevronLeft, Check, X, 
-  UserCircle, Briefcase, Clock, Plus, MoreHorizontal, ArrowRight, Download, Filter 
+  UserCircle, Briefcase, Clock, Plus, MoreHorizontal, ArrowRight, Download 
 } from 'lucide-react';
 import './style.css';
 
@@ -42,8 +42,20 @@ function AdminLayout({ user, onLogout, isDark, toggleTheme }) {
 
   // Initial Fetch
   useEffect(() => {
-    fetch('http://localhost:5001/api/employees').then(res=>res.json()).then(setEmployees);
-    fetch('http://localhost:5001/api/leaves').then(res=>res.json()).then(setLeaves);
+    const fetchData = async () => {
+      try {
+        const empRes = await fetch('http://localhost:5001/api/employees');
+        const empData = await empRes.json();
+        setEmployees(empData);
+
+        const leaveRes = await fetch('http://localhost:5001/api/leaves');
+        const leaveData = await leaveRes.json();
+        setLeaves(leaveData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    fetchData();
   }, []);
 
   return (
@@ -89,11 +101,24 @@ const EmployeesView = ({ employees }) => {
   const [term, setTerm] = useState('');
   const filtered = employees.filter(e => e.name.toLowerCase().includes(term.toLowerCase()));
   
+  const handleAdd = async () => {
+    const name = prompt("Enter New Employee Name:");
+    if (!name) return;
+    const newEmp = { name, email: name.split(' ')[0].toLowerCase()+'@abctech.com', role: 'New Hire', dept: 'General', salary: 35000, status: 'Active' };
+    
+    // Optimistic Update (Immediate Reflection)
+    const tempId = Date.now();
+    setEmployees([...employees, { ...newEmp, id: tempId }]);
+
+    // Save to DB
+    await fetch('http://localhost:5001/api/employees', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(newEmp)});
+  };
+
   return (
     <div className="card">
       <div style={{display:'flex', justifyContent:'space-between', marginBottom:'20px'}}>
         <div style={{position:'relative'}}><Search className="search-icon" size={16}/><input className="input-field" placeholder="Search..." style={{paddingLeft:'35px'}} value={term} onChange={e=>setTerm(e.target.value)}/></div>
-        <button className="btn-primary">+ Add Employee</button>
+        <button className="btn-primary" onClick={handleAdd}>+ Add Employee</button>
       </div>
       <div className="table-container">
         <table className="data-table">
@@ -348,24 +373,25 @@ function EmployeeLayout({ user, onLogout, isDark, toggleTheme }) {
     </div>
   );
 }
-// SHARED COMPONENTS (Sidebar, Header, LoginScreen, StatCard)
-// ... Use the EXACT Shared Components from the previous response ...
+
+// ------------------- SHARED COMPONENTS -------------------
 const Sidebar = ({ role, active, setActive, collapsed, setCollapsed, onLogout }) => {
-  const items = role === 'admin' ? ['Dashboard', 'Employees', 'Attendance', 'Leave Requests', 'Payroll', 'Settings'] : ['Dashboard', 'Profile', 'My Leaves'];
+  const items = role === 'admin' ? ['Dashboard', 'Employees', 'Attendance', 'Leave Requests', 'Payroll', 'Settings'] : ['Dashboard', 'Profile', 'My Attendance', 'My Leaves'];
   const icons = { 'Dashboard': <LayoutDashboard/>, 'Employees': <Users/>, 'Attendance': <Calendar/>, 'Leave Requests': <FileText/>, 'Payroll': <DollarSign/>, 'Settings': <Settings/>, 'Profile': <UserCircle/>, 'My Attendance': <Clock/>, 'My Leaves': <Briefcase/> };
   return (
     <aside className="sidebar" style={{ width: collapsed ? '80px' : '260px' }}>
-      <div className="sidebar-logo"><div className="logo-icon"><LayoutDashboard size={20}/></div>{!collapsed && <span style={{marginLeft:'12px', fontWeight:'700', fontSize:'22px'}}>Dayflow</span>}</div>
+      <div className="sidebar-logo"><div className="logo-icon"><LayoutDashboard size={20}/></div>{!collapsed && <span style={{fontWeight:'700', fontSize:'22px', marginLeft:'12px'}}>Dayflow</span>}</div>
       <nav className="nav-menu">{items.map(i => <button key={i} onClick={()=>setActive(i)} className={`nav-item ${active===i?'active':''}`}>{icons[i]} {!collapsed && i}</button>)}</nav>
       <div style={{marginTop:'auto', paddingTop:'20px', borderTop:'1px solid var(--border)'}}><button className="nav-item" onClick={()=>setCollapsed(!collapsed)}><ChevronLeft/> {!collapsed && "Collapse"}</button><button className="nav-item" onClick={onLogout}><LogOut/> {!collapsed && "Logout"}</button></div>
     </aside>
   );
 };
 
-const Header = ({ title, user, isDark, toggleTheme }) => (
+const Header = ({ title, user, isDark, toggleTheme, search, setSearch }) => (
   <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px', alignItems:'center' }}>
     <div><h1 style={{fontSize:'26px', fontWeight:'700'}}>{title}</h1><p>Welcome, {user.name.split(' ')[0]}</p></div>
     <div style={{ display: 'flex', gap: '16px' }}>
+      {setSearch && <div style={{position:'relative'}}><Search size={18} style={{position:'absolute', top:'12px', left:'12px', color:'gray'}}/><input className="input-field" placeholder="Search..." style={{width:'280px', paddingLeft:'40px'}} value={search} onChange={e=>setSearch(e.target.value)} /></div>}
       <button className="btn-icon" onClick={toggleTheme}>{isDark ? <Sun/> : <Moon/>}</button>
     </div>
   </header>
@@ -374,9 +400,7 @@ const Header = ({ title, user, isDark, toggleTheme }) => (
 const StatCard = ({ title, val, sub, color, icon }) => (
   <div className="card" style={{marginBottom:0}}>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
-      <div><p style={{fontSize:'12px', color:'gray', textTransform:'uppercase', fontWeight:'600', marginBottom:'8px'}}>{title}</p><h2 style={{fontSize:'32px', margin:0}}>{val}</h2></div>
-      <div style={{padding:'10px', background:color, borderRadius:'12px', color:'white'}}>{icon}</div>
-    </div>
+      <div><p style={{fontSize:'12px', color:'gray', textTransform:'uppercase', fontWeight:'600'}}>{title}</p><h2 style={{fontSize:'32px', margin:0}}>{val}</h2></div><div style={{padding:'10px', background:color, borderRadius:'12px', color:'white'}}>{icon}</div></div>
     <p style={{fontSize:'12px', color, marginTop:'12px'}}>{sub}</p>
   </div>
 );
